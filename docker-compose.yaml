@@ -66,32 +66,34 @@ services:
       timeout: 3s
       retries: 5
       start_period: 5s
-  # redpanda_console:
-  #   container_name: redpanda_console
-  #   image: docker.redpanda.com/redpandadata/console:latest
-  #   entrypoint: /bin/sh
-  #   command: -c "echo \"$$CONSOLE_CONFIG_FILE\" > /tmp/config.yml; /app/console"
-  #   environment:
-  #     CONFIG_FILEPATH: /tmp/config.yml
-  #     CONSOLE_CONFIG_FILE: |
-  #       kafka:
-  #         brokers: ["redpanda:29092"]
-  #         schemaRegistry:
-  #           enabled: true
-  #           urls: ["http://redpanda:8081"]
-  #       redpanda:
-  #         adminApi:
-  #           enabled: true
-  #           urls: ["http://redpanda:9644"]
-  #       connect:
-  #         enabled: true
-  #         clusters:
-  #           - name: local-connect-cluster
-  #             url: http://connect:8083
-  #   ports:
-  #     - 8080:8080
-  #   depends_on:
-  #     - redpanda
+  redpanda_console:
+    container_name: redpanda_console
+    image: docker.redpanda.com/redpandadata/console:latest
+    entrypoint: /bin/sh
+    command: -c "echo \"$$CONSOLE_CONFIG_FILE\" > /tmp/config.yml; /app/console"
+    environment:
+      CONFIG_FILEPATH: /tmp/config.yml
+      CONSOLE_CONFIG_FILE: |
+        kafka:
+          brokers: ["redpanda:9092"]
+          schemaRegistry:
+            enabled: true
+            urls: ["http://redpanda:8081"]
+        redpanda:
+          adminApi:
+            enabled: true
+            urls: ["http://redpanda:9644"]
+        connect:
+          enabled: true
+          clusters:
+            - name: local-connect-cluster
+              url: http://connect:8083
+    ports:
+      - 8080:8080
+    networks:
+      - elastic
+    depends_on:
+      - redpanda
   logstash_producer:
     container_name: logstash_producer
     image: docker.elastic.co/logstash/logstash:8.10.2
