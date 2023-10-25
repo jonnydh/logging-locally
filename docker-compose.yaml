@@ -1,0 +1,118 @@
+version: '1'
+networks:
+  elastic:
+    driver: bridge
+volumes:
+  data01:
+      driver: local
+  redpanda: null
+services:
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.6.1
+    container_name: es
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    volumes:
+      - data01:/usr/share/elasticsearch/data
+    ports:
+      - 9200:9200
+    networks:
+      - elastic
+    mem_limit: 1g
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.6.1
+    container_name: kibana
+    environment:
+      SERVER_NAME: 127.0.0.1
+      ELASTICSEARCH_HOSTS: '["http://es:9200"]'
+    ports:
+      - "5601:5601"
+    networks:
+      - elastic
+    depends_on:
+      - elasticsearch
+    restart: "unless-stopped"
+  redpanda:
+    container_name: redpanda
+    image: docker.redpanda.com/redpandadata/redpanda:v23.2.12
+    command:
+      - redpanda start
+      - --smp 1
+      - --overprovisioned
+      - --kafka-addr internal://0.0.0.0:9092,external://0.0.0.0:19092
+      # Address the broker advertises to clients that connect to the Kafka API.
+      # Use the internal addresses to connect to the Redpanda brokers
+      # from inside the same Docker network.
+      # Use the external addresses to connect to the Redpanda brokers
+      # from outside the Docker network.
+      - --advertise-kafka-addr internal://redpanda:9092
+    ports:
+    - 9092:9092
+    - 19092:19092
+    volumes:
+      - redpanda:/var/lib/redpanda/data
+    networks:
+      - elastic
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster health | grep -E 'Healthy:.+true' || exit 1"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+  # redpanda_console:
+  #   container_name: redpanda_console
+  #   image: docker.redpanda.com/redpandadata/console:latest
+  #   entrypoint: /bin/sh
+  #   command: -c "echo \"$$CONSOLE_CONFIG_FILE\" > /tmp/config.yml; /app/console"
+  #   environment:
+  #     CONFIG_FILEPATH: /tmp/config.yml
+  #     CONSOLE_CONFIG_FILE: |
+  #       kafka:
+  #         brokers: ["redpanda:29092"]
+  #         schemaRegistry:
+  #           enabled: true
+  #           urls: ["http://redpanda:8081"]
+  #       redpanda:
+  #         adminApi:
+  #           enabled: true
+  #           urls: ["http://redpanda:9644"]
+  #       connect:
+  #         enabled: true
+  #         clusters:
+  #           - name: local-connect-cluster
+  #             url: http://connect:8083
+  #   ports:
+  #     - 8080:8080
+  #   depends_on:
+  #     - redpanda
+  logstash_producer:
+    container_name: logstash_producer
+    image: docker.elastic.co/logstash/logstash:8.10.2
+    ports:
+      - "514:514"
+    command: logstash -f /etc/logstash/conf.d
+    volumes:
+      - ./logstash/producer:/etc/logstash/conf.d
+    environment:
+      - XPACK_MONITORING_ENABLED=false
+      - "LS_JAVA_OPTS=-Xms512m -Xmx512m"
+    networks:
+      - elastic
+  logstash_consumer:
+    container_name: logstash_consumer
+    image: docker.elastic.co/logstash/logstash:8.10.2
+    command: logstash -f /etc/logstash/conf.d
+    volumes:
+      - ./logstash/consumer:/etc/logstash/conf.d
+    environment:
+      - XPACK_MONITORING_ENABLED=false
+      - "LS_JAVA_OPTS=-Xms512m -Xmx512m"
+    networks:
+      - elastic
